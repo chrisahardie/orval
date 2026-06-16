@@ -177,14 +177,27 @@ export function getMockScalar({
   if (item.format && ALL_FORMAT[item.format]) {
     let value = ALL_FORMAT[item.format];
 
-    const dateFormats = ['date', 'date-time'];
-    if (dateFormats.includes(item.format) && context.output.override.useDates) {
+    const dateConfig = context.output.override.dateType?.[item.format];
+    const mockImports: GeneratorImport[] = [];
+    if (dateConfig) {
+      if (dateConfig.mock) {
+        value = dateConfig.mock;
+        if (dateConfig.mockImport) {
+          mockImports.push({ ...dateConfig.mockImport, values: true });
+        }
+      } else if (dateConfig.type === 'Date') {
+        value = `new Date(${value})`;
+      }
+    } else if (
+      ['date', 'date-time'].includes(item.format) &&
+      context.output.override.useDates
+    ) {
       value = `new Date(${value})`;
     }
 
     return {
       value: getNullable(value, isNullable, nonNullableOption),
-      imports: [],
+      imports: mockImports,
       name: item.name,
       overrided: false,
       nullWrapped,

@@ -8,6 +8,7 @@ import {
   type ContextSpec,
   generateMutator,
   type GeneratorDependency,
+  type GeneratorImport,
   type GeneratorMutator,
   type GeneratorOptions,
   type GeneratorVerbOptions,
@@ -765,7 +766,21 @@ export const generateZodValidationSchemaDefinition = (
           break;
         }
 
-        if (
+        const dateConfig =
+          context.output.override.dateType?.[schema.format ?? ''];
+        if (dateConfig) {
+          if (dateConfig.zod?.transform) {
+            // Fall through to normal string handling path which pushes
+            // the string type and format functions. The transform is
+            // appended after the format function in the format-specific
+            // handlers below (date, date-time, time).
+          } else if (dateConfig.type === 'Date') {
+            functions.push(['date', undefined]);
+            break;
+          }
+          // Custom type without zod transform: fall through to normal
+          // string validation (no runtime coercion).
+        } else if (
           context.output.override.useDates &&
           (schema.format === 'date' || schema.format === 'date-time')
         ) {
@@ -830,6 +845,11 @@ export const generateZodValidationSchemaDefinition = (
           const formatAPI = getZodDateFormat(isZodV4);
 
           functions.push([formatAPI, undefined]);
+          const dateTransform =
+            context.output.override.dateType?.['date']?.zod?.transform;
+          if (dateTransform) {
+            functions.push(['transform', dateTransform]);
+          }
           break;
         }
 
@@ -838,6 +858,11 @@ export const generateZodValidationSchemaDefinition = (
           const formatAPI = getZodTimeFormat(isZodV4);
 
           functions.push([formatAPI, JSON.stringify(options)]);
+          const timeTransform =
+            context.output.override.dateType?.['time']?.zod?.transform;
+          if (timeTransform) {
+            functions.push(['transform', timeTransform]);
+          }
           break;
         }
 
@@ -846,6 +871,11 @@ export const generateZodValidationSchemaDefinition = (
           const formatAPI = getZodDateTimeFormat(isZodV4);
 
           functions.push([formatAPI, JSON.stringify(options)]);
+          const dateTimeTransform =
+            context.output.override.dateType?.['date-time']?.zod?.transform;
+          if (dateTimeTransform) {
+            functions.push(['transform', dateTimeTransform]);
+          }
           break;
         }
 
@@ -2609,16 +2639,32 @@ export const generateZod: ClientBuilder = async (verbOptions, options) => {
     options,
   );
 
+  const dateType = options.context.output.override.dateType;
+  const dateTransformImports: GeneratorImport[] = [];
+  if (dateType) {
+    for (const config of Object.values(dateType)) {
+      if (config.zod?.transformImport) {
+        dateTransformImports.push({
+          ...config.zod.transformImport,
+          values: true,
+        });
+      }
+    }
+  }
+
   return {
     implementation: implementation ? `${implementation}\n\n` : '',
     // Zod schemas are runtime values (not type-only), so mark with values: true
     // to prevent the import writer from emitting `import type { ... }`. Sort
     // by name so import order is stable across runs.
-    imports: [...usedRefs].toSorted().map((name) => ({
-      name,
-      schemaName: name,
-      values: true,
-    })),
+    imports: [
+      ...[...usedRefs].toSorted().map((name) => ({
+        name,
+        schemaName: name,
+        values: true,
+      })),
+      ...dateTransformImports,
+    ],
     mutators,
   };
 };

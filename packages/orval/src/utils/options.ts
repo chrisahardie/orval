@@ -4,6 +4,7 @@ import { styleText } from 'node:util';
 
 import {
   type ConfigExternal,
+  type DateTypeConfig,
   type EffectOptions,
   FormDataArrayHandling,
   type GlobalMockOptions,
@@ -27,6 +28,7 @@ import {
   type McpServerOptions,
   type Mutator,
   NamingConvention,
+  type NormalizedDateTypeConfig,
   type NormalizedEffectOptions,
   type NormalizedFactoryMethodsOptions,
   type NormalizedHonoOptions,
@@ -58,6 +60,51 @@ import { getDefaultMockOptionsForType } from '@orval/mock';
 import pkg from '../../package.json';
 import { loadPackageJson } from './package-json';
 import { loadTsconfig } from './tsconfig';
+
+export function normalizeDateType(
+  dateTypeConfig: DateTypeConfig | undefined,
+): NormalizedDateTypeConfig | undefined {
+  if (!dateTypeConfig) return undefined;
+
+  const normalized: NormalizedDateTypeConfig = {};
+  for (const [format, config] of Object.entries(dateTypeConfig)) {
+    if (!config.type) {
+      throw new Error(`override.dateType.${format}.type is required`);
+    }
+    normalized[format] = {
+      type: config.type,
+      import: config.import
+        ? {
+            name: config.import.name,
+            importPath: config.import.importPath,
+            default: config.import.default,
+          }
+        : undefined,
+      zod: config.zod
+        ? {
+            transform: config.zod.transform,
+            transformImport: config.zod.transformImport
+              ? {
+                  name: config.zod.transformImport.name,
+                  importPath: config.zod.transformImport.importPath,
+                  default: config.zod.transformImport.default,
+                }
+              : undefined,
+          }
+        : undefined,
+      serializer: config.serializer ?? '(v) => String(v)',
+      mock: config.mock,
+      mockImport: config.mockImport
+        ? {
+            name: config.mockImport.name,
+            importPath: config.mockImport.importPath,
+            default: config.mockImport.default,
+          }
+        : undefined,
+    };
+  }
+  return normalized;
+}
 
 const INPUT_TARGET_FETCH_TIMEOUT_MS = 10_000;
 /**
@@ -607,6 +654,7 @@ export async function normalizeOptions(
             : {}),
         },
         useDates: outputOptions.override?.useDates ?? false,
+        dateType: normalizeDateType(outputOptions.override?.dateType),
         useDeprecatedOperations:
           outputOptions.override?.useDeprecatedOperations ?? true,
         enumGenerationType:

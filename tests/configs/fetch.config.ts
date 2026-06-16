@@ -422,6 +422,55 @@ export default defineConfig({
       target: '../specifications/usedates-only-date-params.yaml',
     },
   },
+  dateTypeTemporal: {
+    output: {
+      target: '../generated/fetch/date-type-temporal/endpoints.ts',
+      schemas: '../generated/fetch/date-type-temporal/model',
+      client: 'fetch',
+      override: {
+        dateType: {
+          date: { type: 'Temporal.PlainDate' },
+          'date-time': { type: 'Temporal.Instant' },
+        },
+      },
+      clean: true,
+      formatter: 'prettier',
+    },
+    input: {
+      target: '../specifications/date-type.yaml',
+    },
+  },
+  dateTypeDayjs: {
+    output: {
+      target: '../generated/fetch/date-type-dayjs/endpoints.ts',
+      schemas: '../generated/fetch/date-type-dayjs/model',
+      client: 'zod',
+      override: {
+        dateType: {
+          'date-time': {
+            type: 'Dayjs',
+            import: { name: 'Dayjs', importPath: 'dayjs' },
+            zod: {
+              transform: 'dayjs',
+              transformImport: {
+                name: 'dayjs',
+                importPath: 'dayjs',
+                default: true,
+              },
+            },
+            serializer: '(v) => v.toISOString()',
+            mock: 'dayjs(faker.date.past())',
+            mockImport: { name: 'dayjs', importPath: 'dayjs', default: true },
+          },
+        },
+      },
+      clean: true,
+      formatter: 'prettier',
+    },
+    input: {
+      target: '../specifications/date-type.yaml',
+    },
+  },
   forceSuccessResponse: {
     output: {
       target: '../generated/fetch/force-success-response/endpoints.ts',

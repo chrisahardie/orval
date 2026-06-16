@@ -142,6 +142,7 @@ export interface NormalizedOverrideOutput {
 
   requestOptions: Record<string, unknown> | boolean;
   useDates?: boolean;
+  dateType?: NormalizedDateTypeConfig;
   useTypeOverInterfaces?: boolean;
   useDeprecatedOperations?: boolean;
   useBigInt?: boolean;
@@ -685,6 +686,7 @@ export interface OverrideOutput {
 
   requestOptions?: Record<string, unknown> | boolean;
   useDates?: boolean;
+  dateType?: DateTypeConfig;
   useTypeOverInterfaces?: boolean;
   useDeprecatedOperations?: boolean;
   useBigInt?: boolean;
@@ -843,6 +845,42 @@ export type ZodCoerceType =
   // wraps array params in a single→array preprocess so a single repeated-key
   // query value (delivered as a scalar by the server framework) still parses.
   | 'array';
+
+/** Configuration for a single date/time format type override */
+export interface DateFormatTypeConfig {
+  /** TypeScript type name (e.g. 'Dayjs', 'Temporal.PlainDate') */
+  type: string;
+  /** Import for the type if needed */
+  import?: { name: string; importPath: string; default?: boolean };
+  /** Zod transform config for runtime conversion */
+  zod?: {
+    /** Expression for .transform() (e.g. 'dayjs', '(s) => Temporal.Instant.from(s)') */
+    transform?: string;
+    /** Import for the transform function */
+    transformImport?: { name: string; importPath: string; default?: boolean };
+  };
+  /** Serializer expression for query params. Receives value as `v`. */
+  serializer?: string;
+  /** Faker mock expression override (e.g. 'dayjs(faker.date.past())') */
+  mock?: string;
+  /** Import for the mock expression's runtime dependency */
+  mockImport?: { name: string; importPath: string; default?: boolean };
+}
+
+export type DateTypeConfig = { [format: string]: DateFormatTypeConfig };
+
+export interface NormalizedDateFormatTypeConfig {
+  type: string;
+  import?: GeneratorImport;
+  zod?: { transform?: string; transformImport?: GeneratorImport };
+  serializer: string;
+  mock?: string;
+  mockImport?: GeneratorImport;
+}
+
+export type NormalizedDateTypeConfig = {
+  [format: string]: NormalizedDateFormatTypeConfig;
+};
 
 export interface NormalizedZodOptions {
   strict: {

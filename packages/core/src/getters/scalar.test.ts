@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContextSpec, OpenApiSchemaObject } from '../types';
-import { getScalar, isBinaryScalarSchema } from './scalar';
+import type {
+  ContextSpec,
+  NormalizedOverrideOutput,
+  OpenApiSchemaObject,
+} from '../types';
+import { getScalar, isBinaryScalarSchema, resolveDateType } from './scalar';
 
 const context = {
   output: {
@@ -294,5 +298,178 @@ describe('getScalar (string const value escaping #3505)', () => {
     const result = getScalar({ item: schema, name: 'timezone', context });
 
     expect(result.value).toBe("'Asia/Tokyo'");
+  });
+});
+
+describe('resolveDateType', () => {
+  it('returns undefined when format is undefined', () => {
+    const override = { useDates: true } as NormalizedOverrideOutput;
+    expect(resolveDateType(undefined, override)).toBeUndefined();
+  });
+
+  it('returns dateType config when present', () => {
+    const override = {
+      dateType: {
+        date: {
+          type: 'Temporal.PlainDate',
+          serializer: '(v) => String(v)',
+        },
+      },
+    } as NormalizedOverrideOutput;
+
+    const result = resolveDateType('date', override);
+    expect(result).toEqual({ type: 'Temporal.PlainDate', import: undefined });
+  });
+
+  it('returns dateType config with import', () => {
+    const override = {
+      dateType: {
+        'date-time': {
+          type: 'Dayjs',
+          import: { name: 'Dayjs', importPath: 'dayjs' },
+          serializer: '(v) => v.toISOString()',
+        },
+      },
+    } as NormalizedOverrideOutput;
+
+    const result = resolveDateType('date-time', override);
+    expect(result).toEqual({
+      type: 'Dayjs',
+      import: { name: 'Dayjs', importPath: 'dayjs' },
+    });
+  });
+
+  it('falls back to useDates for date format', () => {
+    const override = { useDates: true } as NormalizedOverrideOutput;
+    expect(resolveDateType('date', override)).toEqual({ type: 'Date' });
+  });
+
+  it('falls back to useDates for date-time format', () => {
+    const override = { useDates: true } as NormalizedOverrideOutput;
+    expect(resolveDateType('date-time', override)).toEqual({ type: 'Date' });
+  });
+
+  it('returns undefined when no dateType and useDates is false', () => {
+    const override = { useDates: false } as NormalizedOverrideOutput;
+    expect(resolveDateType('date', override)).toBeUndefined();
+  });
+
+  it('dateType takes precedence over useDates', () => {
+    const override = {
+      useDates: true,
+      dateType: {
+        date: {
+          type: 'Temporal.PlainDate',
+          serializer: '(v) => String(v)',
+        },
+      },
+    } as NormalizedOverrideOutput;
+
+    expect(resolveDateType('date', override)).toEqual({
+      type: 'Temporal.PlainDate',
+      import: undefined,
+    });
+  });
+
+  it('returns undefined for non-date formats without dateType', () => {
+    const override = { useDates: true } as NormalizedOverrideOutput;
+    expect(resolveDateType('email', override)).toBeUndefined();
+  });
+
+  it('handles custom formats via dateType', () => {
+    const override = {
+      dateType: {
+        time: {
+          type: 'Temporal.PlainTime',
+          serializer: '(v) => String(v)',
+        },
+      },
+    } as NormalizedOverrideOutput;
+
+    expect(resolveDateType('time', override)).toEqual({
+      type: 'Temporal.PlainTime',
+      import: undefined,
+    });
+  });
+});
+
+describe('getScalar with dateType', () => {
+  it('uses dateType type for date format', () => {
+    const dateContext = {
+      output: {
+        override: {
+          dateType: {
+            date: {
+              type: 'Temporal.PlainDate',
+              serializer: '(v) => String(v)',
+            },
+          },
+        },
+      },
+    } as ContextSpec;
+
+    const schema: OpenApiSchemaObject = {
+      type: 'string',
+      format: 'date',
+    };
+
+    const result = getScalar({
+      item: schema,
+      name: 'startDate',
+      context: dateContext,
+    });
+    expect(result.value).toBe('Temporal.PlainDate');
+  });
+
+  it('includes import from dateType config', () => {
+    const dateContext = {
+      output: {
+        override: {
+          dateType: {
+            'date-time': {
+              type: 'Dayjs',
+              import: { name: 'Dayjs', importPath: 'dayjs' },
+              serializer: '(v) => v.toISOString()',
+            },
+          },
+        },
+      },
+    } as ContextSpec;
+
+    const schema: OpenApiSchemaObject = {
+      type: 'string',
+      format: 'date-time',
+    };
+
+    const result = getScalar({
+      item: schema,
+      name: 'createdAt',
+      context: dateContext,
+    });
+    expect(result.value).toBe('Dayjs');
+    expect(result.imports).toEqual([{ name: 'Dayjs', importPath: 'dayjs' }]);
+  });
+
+  it('still uses Date when useDates is true and no dateType', () => {
+    const dateContext = {
+      output: {
+        override: {
+          useDates: true,
+        },
+      },
+    } as ContextSpec;
+
+    const schema: OpenApiSchemaObject = {
+      type: 'string',
+      format: 'date-time',
+    };
+
+    const result = getScalar({
+      item: schema,
+      name: 'ts',
+      context: dateContext,
+    });
+    expect(result.value).toBe('Date');
+    expect(result.imports).toEqual([]);
   });
 });

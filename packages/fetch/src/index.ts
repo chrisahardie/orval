@@ -139,8 +139,10 @@ export const generateRequestFunction = (
   const explodeParametersNames = explodeParameters.map(
     (parameter) => parameter.name,
   );
+  const dateTypeConfig = context.output.override.dateType;
+
   const hasExplodedDateParams =
-    context.output.override.useDates &&
+    (dateTypeConfig || context.output.override.useDates) &&
     explodeParameters.some((parameter) => {
       if (!parameter.schema) {
         return false;
@@ -150,13 +152,21 @@ export const generateRequestFunction = (
       return schema.format === 'date-time';
     });
 
+  const dateTimeSerializer = dateTypeConfig?.['date-time']?.serializer;
+
+  const buildExplodeValueExpr = () => {
+    if (!hasExplodedDateParams) return 'String(v)';
+    if (dateTimeSerializer) return `(${dateTimeSerializer})(v)`;
+    return 'v instanceof Date ? v.toISOString() : String(v)';
+  };
+
   const explodeArrayImplementation =
     explodeParameters.length > 0
       ? `const explodeParameters = ${JSON.stringify(explodeParametersNames)};
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
-        normalizedParams.append(key, v === null ? 'null' : ${hasExplodedDateParams ? 'v instanceof Date ? v.toISOString() : ' : ''}String(v));
+        normalizedParams.append(key, v === null ? 'null' : ${buildExplodeValueExpr()});
       });
       return;
     }
@@ -167,7 +177,7 @@ export const generateRequestFunction = (
     explodeParameters.length === parameters.length;
 
   const hasDateParams =
-    context.output.override.useDates &&
+    (dateTypeConfig || context.output.override.useDates) &&
     parameterObjects.some((parameter) => {
       if (!parameter.schema) {
         return false;
@@ -177,8 +187,14 @@ export const generateRequestFunction = (
       return schema.format === 'date-time';
     });
 
+  const buildNormalValueExpr = () => {
+    if (!hasDateParams) return 'String(value)';
+    if (dateTimeSerializer) return `(${dateTimeSerializer})(value)`;
+    return 'value instanceof Date ? value.toISOString() : String(value)';
+  };
+
   const normalParamsImplementation = `if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : ${hasDateParams ? 'value instanceof Date ? value.toISOString() : ' : ''}String(value))
+      normalizedParams.append(key, value === null ? 'null' : ${buildNormalValueExpr()})
     }`;
 
   const getUrlFnImplementation = `export const ${getUrlFnName} = (${getUrlFnProps}) => {

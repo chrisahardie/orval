@@ -945,6 +945,176 @@ describe('normalizeOptions', () => {
     }
   });
 
+  describe('dateType normalization', () => {
+    it('returns undefined dateType when not configured', async () => {
+      const workspace = await createTempWorkspace();
+
+      try {
+        const normalized = await normalizeOptions(
+          {
+            input: {
+              target: {
+                openapi: '3.1.0',
+                info: { title: 'Test', version: '1.0.0' },
+                paths: {},
+              },
+            },
+            output: { target: './generated.ts' },
+          },
+          workspace,
+        );
+
+        expect(normalized.output.override.dateType).toBeUndefined();
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('does not synthesize dateType from useDates', async () => {
+      const workspace = await createTempWorkspace();
+
+      try {
+        const normalized = await normalizeOptions(
+          {
+            input: {
+              target: {
+                openapi: '3.1.0',
+                info: { title: 'Test', version: '1.0.0' },
+                paths: {},
+              },
+            },
+            output: {
+              target: './generated.ts',
+              override: { useDates: true },
+            },
+          },
+          workspace,
+        );
+
+        expect(normalized.output.override.useDates).toBe(true);
+        expect(normalized.output.override.dateType).toBeUndefined();
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('normalizes dateType with default serializer', async () => {
+      const workspace = await createTempWorkspace();
+
+      try {
+        const normalized = await normalizeOptions(
+          {
+            input: {
+              target: {
+                openapi: '3.1.0',
+                info: { title: 'Test', version: '1.0.0' },
+                paths: {},
+              },
+            },
+            output: {
+              target: './generated.ts',
+              override: {
+                dateType: {
+                  date: { type: 'Temporal.PlainDate' },
+                },
+              },
+            },
+          },
+          workspace,
+        );
+
+        expect(normalized.output.override.dateType).toEqual({
+          date: {
+            type: 'Temporal.PlainDate',
+            import: undefined,
+            zod: undefined,
+            serializer: '(v) => String(v)',
+            mock: undefined,
+            mockImport: undefined,
+          },
+        });
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('throws when dateType entry has no type', async () => {
+      const workspace = await createTempWorkspace();
+
+      try {
+        await expect(
+          normalizeOptions(
+            {
+              input: {
+                target: {
+                  openapi: '3.1.0',
+                  info: { title: 'Test', version: '1.0.0' },
+                  paths: {},
+                },
+              },
+              output: {
+                target: './generated.ts',
+                override: {
+                  dateType: {
+                    date: { type: '' },
+                  },
+                },
+              },
+            },
+            workspace,
+          ),
+        ).rejects.toThrow('override.dateType.date.type is required');
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('normalizes mockImport for mock expressions', async () => {
+      const workspace = await createTempWorkspace();
+
+      try {
+        const normalized = await normalizeOptions(
+          {
+            input: {
+              target: {
+                openapi: '3.1.0',
+                info: { title: 'Test', version: '1.0.0' },
+                paths: {},
+              },
+            },
+            output: {
+              target: './generated.ts',
+              override: {
+                dateType: {
+                  'date-time': {
+                    type: 'Dayjs',
+                    mock: 'dayjs(faker.date.past())',
+                    mockImport: {
+                      name: 'dayjs',
+                      importPath: 'dayjs',
+                      default: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          workspace,
+        );
+
+        const dt = normalized.output.override.dateType?.['date-time'];
+        expect(dt?.mock).toBe('dayjs(faker.date.past())');
+        expect(dt?.mockImport).toEqual({
+          name: 'dayjs',
+          importPath: 'dayjs',
+          default: true,
+        });
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('optionsParamRequired with fetch httpClient', () => {
     const fetchOptionsRequiredWarningPattern =
       /httpClient: 'fetch'.*optionsParamRequired.*cannot make.*options.*required/s;

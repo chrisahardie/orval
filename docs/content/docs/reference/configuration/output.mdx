@@ -1963,6 +1963,13 @@ export default defineConfig({
 
 Convert `date`/`datetime` to JavaScript `Date` objects.
 
+### dateType
+
+**Type:** `{ [format: string]: DateFormatTypeConfig }`
+**Default:** `undefined`
+
+Per-format date type mapping. Overrides `useDates` with support for Temporal API, dayjs, luxon, and other date libraries.
+
 ### useBigInt
 
 **Type:** `Boolean`
@@ -2634,6 +2641,95 @@ export function handleDates(body: any) {
 ```
 
 > If using `fetch` client with `useDates: true`, query parameters of type Date are stringified using `toISOString()`.
+
+### dateType
+
+**Type:** `{ [format: string]: DateFormatTypeConfig }`
+**Default:** `undefined`
+
+Map OpenAPI string formats (`date`, `date-time`, `time`) to custom TypeScript types instead of `string` or `Date`. Each format can specify its own type, import, Zod transform, query param serializer, and mock expression.
+
+`dateType` takes precedence over `useDates` when both are set. You do not need `useDates: true` when using `dateType`.
+
+#### Config shape
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | `string` | Yes | — | TypeScript type name (e.g. `'Dayjs'`, `'Temporal.PlainDate'`) |
+| `import` | `{ name, importPath, default? }` | No | — | Import for the type. Omit for globals like `Temporal`. |
+| `zod.transform` | `string` | No | — | Expression appended as `.transform(expr)` to Zod schemas |
+| `zod.transformImport` | `{ name, importPath, default? }` | No | — | Import for the transform function |
+| `serializer` | `string` | No | `'(v) => String(v)'` | Query param serializer. Receives value as `v`. |
+| `mock` | `string` | No | — | Faker mock expression override |
+| `mockImport` | `{ name, importPath, default? }` | No | — | Runtime import for the mock expression |
+
+#### Temporal API
+
+```ts title="orval.config.ts"
+export default defineConfig({
+  petstore: {
+    output: {
+      override: {
+        dateType: {
+          date: { type: 'Temporal.PlainDate' },
+          'date-time': { type: 'Temporal.Instant' },
+          time: { type: 'Temporal.PlainTime' },
+        },
+      },
+    },
+  },
+});
+```
+
+This generates types like `startsAt: Temporal.Instant` and `date: Temporal.PlainDate`. Zod schemas remain as string validation (no runtime coercion).
+
+<Callout type="info">
+  `Temporal` is a TC39 Stage 3 global namespace. If your runtime supports it
+  natively (Node 22+), add `"ESNext"` to your TypeScript `lib` in
+  `tsconfig.json`. Otherwise, install `@js-temporal/polyfill` and add the
+  `import` field to each format entry:
+
+  ```ts
+  date: {
+    type: 'Temporal.PlainDate',
+    import: { name: 'Temporal', importPath: '@js-temporal/polyfill' },
+  },
+  ```
+</Callout>
+
+#### dayjs with Zod transform
+
+```ts title="orval.config.ts"
+export default defineConfig({
+  petstore: {
+    output: {
+      override: {
+        dateType: {
+          'date-time': {
+            type: 'Dayjs',
+            import: { name: 'Dayjs', importPath: 'dayjs' },
+            zod: {
+              transform: 'dayjs',
+              transformImport: { name: 'dayjs', importPath: 'dayjs', default: true },
+            },
+            serializer: '(v) => v.toISOString()',
+            mock: 'dayjs(faker.date.past())',
+            mockImport: { name: 'dayjs', importPath: 'dayjs', default: true },
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+This generates:
+- **Types:** `Dayjs` with `import type { Dayjs } from 'dayjs'`
+- **Zod:** `z.string().datetime().transform(dayjs)` with `import dayjs from 'dayjs'`
+- **Query params:** serialized via the `serializer` expression instead of `instanceof Date`
+- **Mocks:** `dayjs(faker.date.past())` instead of `new Date(...)`
+
+> Formats not listed in `dateType` fall back to `string`. You can configure only the formats you need — for example, only `date-time` while leaving `date` as `string`.
 
 ### useBigInt
 

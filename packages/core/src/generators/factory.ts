@@ -484,11 +484,19 @@ function buildDefaultPayload(
   context: ContextSpec,
 ): string {
   if (
-    context.output.override.useDates &&
     typeof schema.default === 'string' &&
     (schema.format === 'date' || schema.format === 'date-time')
   ) {
-    return `new Date('${schema.default}')`;
+    const dateConfig = context.output.override.dateType?.[schema.format];
+    if (dateConfig) {
+      if (dateConfig.type === 'Date') {
+        return `new Date('${schema.default}')`;
+      }
+      return formatValue(schema.default);
+    }
+    if (context.output.override.useDates) {
+      return `new Date('${schema.default}')`;
+    }
   }
   return formatValue(schema.default);
 }
@@ -518,6 +526,13 @@ function buildPrimitivePayload(
       return typeof first === 'string' ? JSON.stringify(first) : String(first);
     }
     if (schema.format === 'date' || schema.format === 'date-time') {
+      const dateConfig = context.output.override.dateType?.[schema.format];
+      if (dateConfig) {
+        if (dateConfig.type === 'Date') {
+          return 'new Date(0)';
+        }
+        return `'${new Date(0).toISOString()}'`;
+      }
       return context.output.override.useDates
         ? 'new Date(0)'
         : `'${new Date(0).toISOString()}'`;

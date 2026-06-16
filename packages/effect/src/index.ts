@@ -260,13 +260,22 @@ export const generateEffectValidationSchemaDefinition = (
     defaultVarName = `${name}Default${constsCounterValue}`;
     let defaultValue: string | undefined;
 
-    const isDateType =
+    const dateConfig =
       schema.type === 'string' &&
-      (schema.format === 'date' || schema.format === 'date-time') &&
-      context.output.override.useDates;
+      (schema.format === 'date' || schema.format === 'date-time')
+        ? context.output.override.dateType?.[schema.format]
+        : undefined;
+    const isDateType =
+      !!dateConfig ||
+      (schema.type === 'string' &&
+        (schema.format === 'date' || schema.format === 'date-time') &&
+        context.output.override.useDates);
 
     if (isDateType) {
-      defaultValue = `new Date(${JSON.stringify(schema.default)})`;
+      defaultValue =
+        dateConfig && dateConfig.type !== 'Date'
+          ? JSON.stringify(schema.default)
+          : `new Date(${JSON.stringify(schema.default)})`;
     } else if (isObject(schema.default)) {
       const entries = Object.entries(schema.default)
         .map(([key, value]) => {
@@ -403,7 +412,15 @@ export const generateEffectValidationSchemaDefinition = (
           break;
         }
 
-        if (
+        const effectDateConfig =
+          context.output.override.dateType?.[schema.format ?? ''];
+        if (effectDateConfig) {
+          if (effectDateConfig.type === 'Date') {
+            functions.push(['date', undefined]);
+            break;
+          }
+          // Custom type without Date: fall through to normal string
+        } else if (
           context.output.override.useDates &&
           (schema.format === 'date' || schema.format === 'date-time')
         ) {

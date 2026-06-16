@@ -242,8 +242,10 @@ const generateImplementation = (
     (parameter) => parameter.name,
   );
 
+  const dateTypeConfig = context.output.override.dateType;
+
   const hasExplodedDateParams =
-    context.output.override.useDates &&
+    (dateTypeConfig || context.output.override.useDates) &&
     explodeParameters.some((parameter) => {
       if (!parameter.schema) {
         return false;
@@ -265,7 +267,7 @@ const generateImplementation = (
     explodeParameters.length === parameters.length;
 
   const hasDateParams =
-    context.output.override.useDates &&
+    (dateTypeConfig || context.output.override.useDates) &&
     parameterObjects.some((parameter) => {
       if (!parameter.schema) {
         return false;
@@ -283,13 +285,21 @@ const generateImplementation = (
       return schemaObject.format === 'date-time' || itemsFormat === 'date-time';
     });
 
+  const dateTimeSerializer = dateTypeConfig?.['date-time']?.serializer;
+
+  const buildValueExpr = (varName: string, hasDate: boolean) => {
+    if (!hasDate) return `String(${varName})`;
+    if (dateTimeSerializer) return `(${dateTimeSerializer})(${varName})`;
+    return `${varName} instanceof Date ? ${varName}.toISOString() : String(${varName})`;
+  };
+
   const explodeArrayImplementation =
     explodeParameters.length > 0
       ? `const explodeParameters = ${JSON.stringify(explodeParametersNames)};
 
       if (Array.isArray(value) && explodeParameters.includes(key)) {
         value.forEach((v) => {
-          normalizedParams.append(key, v === null ? 'null' : ${hasExplodedDateParams ? 'v instanceof Date ? v.toISOString() : ' : ''}String(v));
+          normalizedParams.append(key, v === null ? 'null' : ${buildValueExpr('v', hasExplodedDateParams)});
         });
         return;
       }
@@ -297,7 +307,7 @@ const generateImplementation = (
       : '';
 
   const normalParamsImplementation = `if (value !== undefined) {
-        normalizedParams.append(key, Array.isArray(value) ? value.map(v => v === null ? 'null' : ${hasDateParams ? 'v instanceof Date ? v.toISOString() : ' : ''}String(v)).join(',') : value === null ? 'null' : ${hasDateParams ? 'value instanceof Date ? value.toISOString() : ' : ''}String(value))
+        normalizedParams.append(key, Array.isArray(value) ? value.map(v => v === null ? 'null' : ${buildValueExpr('v', hasDateParams)}).join(',') : value === null ? 'null' : ${buildValueExpr('value', hasDateParams)})
       }`;
 
   // Build query params string

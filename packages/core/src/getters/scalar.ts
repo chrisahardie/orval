@@ -3,6 +3,8 @@ import { isArray } from 'remeda';
 import { resolveExampleRefs } from '../resolvers';
 import type {
   ContextSpec,
+  GeneratorImport,
+  NormalizedOverrideOutput,
   OpenApiSchemaObject,
   OpenApiSchemaObjectType,
   ScalarValue,
@@ -13,6 +15,19 @@ import { getArray } from './array';
 import { combineSchemas } from './combine';
 import type { FormDataContext } from './object';
 import { getObject } from './object';
+
+export function resolveDateType(
+  format: string | undefined,
+  override: NormalizedOverrideOutput,
+): { type: string; import?: GeneratorImport } | undefined {
+  if (!format) return undefined;
+  const config = override.dateType?.[format];
+  if (config) return { type: config.type, import: config.import };
+  if (override.useDates && (format === 'date' || format === 'date-time')) {
+    return { type: 'Date' };
+  }
+  return undefined;
+}
 
 /** Bridge type for enum values extracted from OpenAPI schemas infected by AnyOtherAttribute */
 type SchemaEnumValue = string | number | boolean | null;
@@ -233,11 +248,14 @@ export function getScalar({
         }
       }
 
-      if (
-        context.output.override.useDates &&
-        (schemaFormat === 'date' || schemaFormat === 'date-time')
-      ) {
-        value = 'Date';
+      const dateResolved = resolveDateType(
+        schemaFormat,
+        context.output.override,
+      );
+      const dateImports: GeneratorImport[] = [];
+      if (dateResolved) {
+        value = dateResolved.type;
+        if (dateResolved.import) dateImports.push(dateResolved.import);
       }
 
       value += nullable;
@@ -250,7 +268,7 @@ export function getScalar({
         value: value,
         isEnum,
         type: 'string',
-        imports: [],
+        imports: dateImports,
         schemas: [],
         isRef: false,
         hasReadonlyProps: schemaReadOnly ?? false,
